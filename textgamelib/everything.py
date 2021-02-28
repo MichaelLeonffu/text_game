@@ -131,6 +131,7 @@ class Action:
 	def act(self):
 		"""Change the state"""
 
+		print(self.priori)
 		self.__act_run()
 
 	# These are transitions to change State with arg
@@ -168,6 +169,39 @@ class Thing:
 		"""Retrun the list of actions for this Thing"""
 
 		return self.__actions
+
+class Item(Thing):
+	"""An Item... for lack of a better understanding"""
+
+	def __init__(self, name: str, des: str):
+		super().__init__(name, des)
+
+	def clone(self):
+		return Item(self.name, self.des)
+
+	def __str__(self):
+		return self.name + ": " + self.des
+
+class Bag(Thing):
+	"""A bag can hold items, it's a container for Items(Thing)"""
+
+	def __init__(self, name: str, des: str):
+		super().__init__(name, des)
+		self.items = list()
+
+	def add_item(self, item: Item):
+		self.items.append(item)
+
+	def print_contents(self):
+		"""Prints contents of the bag"""
+	
+		if len(self.items) == 0:
+			print("Bag is empty")
+		else:
+			for item in self.items:
+				print(item)
+		
+
 
 class Room(Thing):
 	"""Rooms contains Things: player, items, context, and doors"""
@@ -235,6 +269,21 @@ class Player(Thing):
 	def __init__(self):
 		super().__init__("The Entity", "The player")
 
+
+		self.bag = Bag("Inventory", "Normal looking bag")
+
+		def look_at_bag(bag: Bag):
+			return lambda: bag.print_contents()
+
+		self.add_action(Action(
+			description="Look through bag",
+			priori="You look into your bag",
+			posteriori="",
+			act_run=look_at_bag(self.bag)
+		))
+
+		self.last_command = ""
+
 	def free_will(self, actions: Action):
 		"""Player takes an Action of actions"""
 
@@ -245,9 +294,21 @@ class Player(Thing):
 			num += 1
 		
 		print("> ", end="")
-		action_num = int(input())
 
-		actions[action_num].act()
+		user_input = input()
+
+		# Pressed enter, loop last command
+		if len(user_input) == 0:
+			if len(self.last_command) == 0:
+				return
+			actions[int(self.last_command)].act()
+
+		else:
+			actions[int(user_input)].act()
+
+			# Record this command
+			self.last_command = user_input
+
 
 class World(Thing):
 	"""The world which contains things
@@ -317,27 +378,29 @@ class World(Thing):
 			print("\n" + self.__curr_room.name)
 			print(self.__curr_room.des)
 
-			# The room actions
-			# actions = list() + self.__curr_room.get_actions()
-			# nav_actions = list() + self.__curr_room.doors
+			# All actions that can be taken
 			actions = list()
-			nav_actions = list()
+
+			# Navagation actions
 			for door in self.__curr_room.doors:
-				nav_actions += door.get_actions()
+				actions += door.get_actions()
 
-			actions += nav_actions
-
-			# All things in the room
+			# Actions that this room has
+			actions += self.__curr_room.get_actions()
+			
+			# Actions that Things in this room has
 			for t in self.__curr_room.container:
 				actions += t.get_actions()
+
+			# Actions that the player has in it's bag
+			for i in self.__player.bag.items:
+				actions += i.get_actions()
 
 			# Give the player all the Actions
 			self.__player.free_will(actions)
 
 	def mv_room(self, new_room: Room, priori: str=None):
 		"""Moves room, prints priori if defined"""
-		if priori != None:
-			print(priori)
 
 		self.__curr_room = new_room
 
@@ -390,6 +453,27 @@ def main():
 		name="Meow's House",
 		des="Meow lives here. Meow is designing a text game..."
 	)
+
+	# Make some items that can exist in the world
+	master_pizza = Item(
+		name="Pizza",
+		des="It's a pretty Pizza... what ever that means..."
+	)
+
+	# Make some features
+	def make_pizza(player):
+		return lambda: player.bag.add_item(master_pizza.clone())
+
+	# Make some of these rooms have cool features
+	cook_pizza = Action(
+		description="Bake a pretty pizza",
+		priori="You bake a pizza",
+		posteriori="",
+		act_run=make_pizza(my_player)
+	)
+
+	# Add the features to the Room
+	diego_house.add_action(cook_pizza)
 
 	# Add Doors to the Rooms
 	diego_house.make_door_to(
