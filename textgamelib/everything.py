@@ -121,7 +121,6 @@ class Action:
 	"""
 
 	def __init__(self, description: str, priori: str, posteriori: str, act_run):
-		print("Action")
 		self.description = description
 		self.priori = priori
 		self.posteriori = posteriori
@@ -132,7 +131,6 @@ class Action:
 	def act(self):
 		"""Change the state"""
 
-		print("Acting")
 		self.__act_run()
 
 	# These are transitions to change State with arg
@@ -156,15 +154,14 @@ class Thing:
 	Actions 
 	"""
 
-	def __init__(self, des: str):
+	def __init__(self, name: str, des: str):
 		self.__actions = list()
+		self.name = name
 		self.des = des
-		print("Thing")
 
 	def add_action(self, action: Action):
 		"""Add an Action to this Thing"""
 
-		print("Add Action")
 		self.__actions.append(action)
 
 	def get_actions(self) -> list():
@@ -175,32 +172,68 @@ class Thing:
 class Room(Thing):
 	"""Rooms contains Things: player, items, context, and doors"""
 
-	def __init__(self, des: str, *things: Thing):
-		super().__init__(des)
+	def __init__(self, name: str, des: str, *things: Thing):
+		super().__init__(name, des)
 
 		# If things is not given then it defaults to () empty tuple
 		self.container = list(things)
 
-		print("Room")
+		# init the Doors
+		self.doors = list()
 
 	def add_thing(self, thing: Thing):
 		"""Add a Thing to this room"""
 
 		self.container.append(thing)
 
+	def __str__(self):
+		return "Room: %s" % self.name
+
+	def make_door_to(self, room, name: str, des: str="", append_dest_to_name: bool=False, append_dest_to_des: bool=False):
+		"""Make a door from self to `room`
+
+		room: Room, The dest room this door will lead to.
+		name: str, The name of this Door
+		des: str, The description of Door
+		append_dest_to_name: bool, (default) False, If True then append the " " + `room.name` to the end of `name`
+		append_dest_to_des: bool, (default) False, If True then append the " " + `room.name` to the end of `des`
+		"""
+
+		if append_dest_to_name:
+			name += " " + room.name
+
+		if append_dest_to_des:
+			des += " " + room.name
+
+		self.doors.append(Door(name, des, room))
+
 class Door(Thing):
 	"""Connects rooms together"""
 
 	def __init__(self):
-		super().__init__("A Door")
-		print("Door")
+		super().__init__("A Door", "A plain and normal looking door.")
+		self.dest = None
+
+
+	def __init__(self, name: str, des: str, dest: Room):
+		"""Door
+
+		name: str, name of this door
+		des: str, description of this door
+		dest: Room, room that this door leads to
+		"""
+
+		super().__init__(name, des)
+		self.dest = dest
+
+	def __str__(self):
+		return "Door to %s" % self.dest.name
 
 class Player(Thing):
 	"""Has blocking calls and interface to a user, can take actions"""
 
 	def __init__(self):
-		super().__init__("The Entity")
-		print("Player")
+		super().__init__("The Entity", "The player")
 
 	def free_will(self, actions: Action):
 		"""Player takes an Action of actions"""
@@ -211,6 +244,7 @@ class Player(Thing):
 			print(num, ": ", act.description)
 			num += 1
 		
+		print("> ", end="")
 		action_num = int(input())
 
 		actions[action_num].act()
@@ -233,18 +267,19 @@ class World(Thing):
 	"""
 
 	def __init__(self, player: Player):
-		super().__init__("The World")
+		super().__init__("The World", "A construct")
 		self.__player = player
 		self.__rooms = list()
 
 		self.__curr_room = None
 
-		print("World made")
+	def add_room(self, room: Room, gen_door: bool=True):
+		"""Add room to this world
+		room: Room, The room to add
+		gen_door: bool, (default) True: connect this to the previous room with
+			a generic door. False: Do not connect.
 
-	def add_room(self, room: Room):
-		"""Add room to this world"""
-
-		print("adding room")
+		"""
 
 		# If there are no rooms yet then add this as the first room
 		if len(self.__rooms) <= 0:
@@ -253,7 +288,8 @@ class World(Thing):
 			return
 
 		# Generate a Door for this room to the previous one
-		self.gen_door(self.__rooms[-1], room)
+		if gen_door:
+			self.gen_door(self.__rooms[-1], room)
 
 		# Add this new Room into the rooms
 		self.__rooms.append(room)
@@ -278,10 +314,18 @@ class World(Thing):
 		# Generate a list of Actions from Things in the current Room
 		while True:
 			# Get all things in that Room
-			print("You are in the: ", self.__curr_room.des)
+			print("\n" + self.__curr_room.name)
+			print(self.__curr_room.des)
 
 			# The room actions
-			actions = list() + self.__curr_room.get_actions()
+			# actions = list() + self.__curr_room.get_actions()
+			# nav_actions = list() + self.__curr_room.doors
+			actions = list()
+			nav_actions = list()
+			for door in self.__curr_room.doors:
+				nav_actions += door.get_actions()
+
+			actions += nav_actions
 
 			# All things in the room
 			for t in self.__curr_room.container:
@@ -290,7 +334,11 @@ class World(Thing):
 			# Give the player all the Actions
 			self.__player.free_will(actions)
 
-	def set_curr(self, new_room: Room):
+	def mv_room(self, new_room: Room, priori: str=None):
+		"""Moves room, prints priori if defined"""
+		if priori != None:
+			print(priori)
+
 		self.__curr_room = new_room
 
 	def gen_door(self, room_a: Room, room_b: Room) -> Door:
@@ -299,12 +347,27 @@ class World(Thing):
 		# a -> b and b -> a
 		# Assumes that Player is in the priori room
 		def move_room(world, new_room):
-			return lambda: world.set_curr(new_room)
+			return lambda: world.mv_room(new_room)
 
 		room_a.add_action(Action("Move room to " + room_b.des, "You're moving", "You moved", move_room(self, room_b)))
 
 		room_b.add_action(Action("Move room to " + room_a.des, "You're moving", "You moved", move_room(self, room_a)))
 
+	def gen_door_actions(self):
+		"""Generates Actions for Doors which are in this World"""
+
+		def move_room(world, new_room, priori):
+			return lambda: world.mv_room(new_room, priori)
+
+		# For each of the Rooms
+		for r in self.__rooms:
+			for d in r.doors:
+				d.add_action(Action(
+					description=d.name,
+					priori=d.des,
+					posteriori="",
+					act_run=move_room(self, d.dest, d.des)
+				))
 
 def main():
 	
@@ -312,21 +375,72 @@ def main():
 	my_player = Player()
 
 	# Make the world first
-	my_world = World(my_player)
+	cbad_world = World(my_player)
 
-	# Make some rooms for the world
-	room_1 = Room("Big small room")
-	room_2 = Room("Small big room")
-	room_3 = Room("An normal room")
+	# Make some Rooms for the world
+	diego_house = Room(
+		name="Deigo's House",
+		des="Diego lives here. You smell the pizza that is baking in the oven."
+	)
+	anna_house = Room(
+		name="Anna's House",
+		des="Anna lives here with Baba. Baba is outside watching birds and thinking about optics."	
+	)
+	meow_house = Room(
+		name="Meow's House",
+		des="Meow lives here. Meow is designing a text game..."
+	)
 
-	# World will add a Door to each room in order
-	my_world.add_room(room_1)
-	my_world.add_room(room_2)
-	my_world.add_room(room_3)
-	my_world.add_room(room_1) # circle?
+	# Add Doors to the Rooms
+	diego_house.make_door_to(
+		room=anna_house,
+		name="Go to",
+		append_dest_to_name=True,
+		des="You take the red prius and drive to",
+		append_dest_to_des=True
+	)
+	anna_house.make_door_to(
+		room=diego_house,
+		name="Go to",
+		append_dest_to_name=True,
+		des="You take the blue crv and drive to",
+		append_dest_to_des=True
+	)
+	anna_house.make_door_to(
+		room=meow_house,
+		name="Go to",
+		append_dest_to_name=True,
+		des="You take the blue crv and drive to",
+		append_dest_to_des=True
+	)
+	meow_house.make_door_to(
+		room=anna_house,
+		name="Go to",
+		append_dest_to_name=True,
+		des="You take the red rav4 and drive to",
+		append_dest_to_des=True
+	)
+
+	# World will add a add these Rooms, but not add a Door
+	cbad_world.add_room(diego_house, False)
+	cbad_world.add_room(anna_house, False)
+	cbad_world.add_room(meow_house, False)
+
+	# We need to world to generate Actions for Doors
+	cbad_world.gen_door_actions()
+
+	# Explaination:
+		# While Doors exist in Rooms, the world is what
+		# determins which Room the Player is in, as such
+		# the World must be the one that can cause a Player
+		# to move between Rooms given Doors.
+
+		# The World will automatically scan all Rooms for
+		# Doors then update the Doors to have the correct
+		# Actions which will "move" the Player from Room to Room
 
 	# Start the simulation
-	my_world.start_world()
+	cbad_world.start_world()
 
 
 
