@@ -524,9 +524,40 @@ def main():
 		# Actions which will "move" the Player from Room to Room
 
 	# Start the simulation
-	cbad_world.start_world()
+	# cbad_world.start_world()
 
+	# import meow_world as mworld
 
+	import yaml
+	stream = open('meow_world.yml', 'r')
+	mworld = yaml.load(stream, yaml.SafeLoader)
+
+	bplayer = Player()
+	bworld = World(bplayer)
+
+	rooms = {
+		r['id']: Room(
+			name=r['name'],
+			des=r['des']
+		) for r in mworld['rooms']
+	}
+
+	# Generate doors
+	for d in  mworld['doors']:
+		rooms[d['origin']].make_door_to(
+			room=rooms[d['dest']],
+			name=d['name'],
+			append_dest_to_name=d['append_dest_to_name'],
+			des=d['des'],
+			append_dest_to_des=d['append_dest_to_des']
+		)
+
+	for r in rooms:
+		bworld.add_room(rooms[r], False)
+
+	bworld.gen_door_actions()
+
+	bworld.start_world()
 
 if __name__ == "__main__":
 	main()
